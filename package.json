@@ -5,7 +5,7 @@
     "main": "server-https.js",
     "bin": "server-https.js",
     "scripts": {
-      "start": "node server-https.js",
+      "start": "node server.js",
       "build": "pkg . --targets node18-win-x64 --output OguWatcher.exe"
     },
     "dependencies": {

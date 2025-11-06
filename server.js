@@ -1,5 +1,7 @@
 const express = require('express');
-const http = require('http');
+const https = require('https');
+const fs = require('fs');
+const path = require('path');
 const WebSocket = require('ws');
 const cors = require('cors');
 const os = require('os');
@@ -7,548 +9,370 @@ const os = require('os');
 const app = express();
 app.use(cors());
 
-const server = http.createServer(app);
+// ★ 証明書は「certs」など配信外ディレクトリに置く（同階層でもOKだが static で配らないこと）
+const SSL_OPTIONS = {
+  key: fs.readFileSync(path.join(__dirname, 'private-key.pem')),
+  cert: fs.readFileSync(path.join(__dirname, 'certificate.pem')),
+};
+
+const PORT = 8443;
+const server = https.createServer(SSL_OPTIONS, app);
 const wss = new WebSocket.Server({ server });
 
 function getLocalIP() {
-    const interfaces = os.networkInterfaces();
-    for (const name of Object.keys(interfaces)) {
-        for (const iface of interfaces[name]) {
-            if (iface.family === 'IPv4' && !iface.internal) {
-                return iface.address;
-            }
-        }
+  const interfaces = os.networkInterfaces();
+  for (const name of Object.keys(interfaces)) {
+    for (const iface of interfaces[name]) {
+      if (iface.family === 'IPv4' && !iface.internal) return iface.address;
     }
-    return 'localhost';
+  }
+  return 'localhost';
 }
-
 const LOCAL_IP = getLocalIP();
-const HOSTNAME = os.hostname();
-const PORT = 8080;
 
-const cameras = new Map();
+const cameras = new Map(); // cameraId -> { ws, lastFrame, name }
 const viewers = new Set();
 
 console.clear();
 console.log('\x1b[36m%s\x1b[0m', '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-console.log('\x1b[36m%s\x1b[0m', '        📹 OguWatcher');
+console.log('\x1b[36m%s\x1b[0m', '        📹 OguWatcher (HTTPS)');
 console.log('\x1b[36m%s\x1b[0m', '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 console.log('');
-console.log('\x1b[33m%s\x1b[0m', '✓ サーバー起動しました');
+console.log('\x1b[33m%s\x1b[0m', '✓ HTTPSサーバー起動');
 console.log('');
-console.log('\x1b[32m%s\x1b[0m', '【iPadでアクセス - 以下を試してください】');
+console.log('\x1b[32m%s\x1b[0m', '【iPad/スマホでアクセス】');
 console.log('');
-console.log('\x1b[35m%s\x1b[0m', `方法1: http://${HOSTNAME}.local:${PORT}/camera.html`);
-console.log('\x1b[35m%s\x1b[0m', `方法2: http://${LOCAL_IP}:${PORT}/camera.html`);
+console.log('\x1b[35m%s\x1b[0m', `   https://${LOCAL_IP}:${PORT}/camera.html`);
 console.log('');
-console.log('\x1b[33m%s\x1b[0m', '※方法1が推奨（localhostとして認識されカメラが使える）');
+console.log('\x1b[33m%s\x1b[0m', '※初回は証明書の警告が出ます → 「詳細」→「続ける」');
 console.log('');
-console.log('【PCでの確認】');
-console.log(`http://${LOCAL_IP}:${PORT}/viewer`);
+console.log('【PCで確認】');
+console.log(`   https://${LOCAL_IP}:${PORT}/viewer`);
 console.log('');
 console.log('\x1b[36m%s\x1b[0m', '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 console.log('');
 
-app.use(express.static(__dirname));
-
-app.get('/viewer', (req, res) => {
-    res.send(getViewerHTML());
+// ★ 不要な全公開はやめる。必要なファイルだけ配信
+app.get('/camera.html', (_req, res) => {
+  res.sendFile(path.join(__dirname, 'camera.html'));
 });
 
-let expectingVideoData = false;
-let expectingCameraAudioData = false;
-let expectingPCAudioData = false;
-let currentCameraId = null;
-let targetCameraId = null;
+app.get('/viewer', (_req, res) => {
+  res.send(getViewerHTML());
+});
+
+// ===== WebSocket =====
+
+// 接続単位の状態を持つ
+function initWsState(ws) {
+  ws.role = null; // 'camera' | 'viewer'
+  ws.pending = null; // 直後のバイナリが何か: { kind: 'video'|'audio-from-camera'|'audio-from-pc', cameraId?, targetCameraId? }
+  ws.cameraId = null;
+}
 
 wss.on('connection', (ws, req) => {
-    console.log('新規接続');
+  initWsState(ws);
+  console.log('新規接続');
 
-    ws.on('message', (message) => {
-        try {
-            if (message[0] === '{'.charCodeAt(0)) {
-                const data = JSON.parse(message.toString());
-                
-                if (data.type === 'video') {
-                    expectingVideoData = true;
-                    currentCameraId = data.cameraId;
-                    return;
-                }
-                
-                if (data.type === 'audio-from-camera') {
-                    expectingCameraAudioData = true;
-                    currentCameraId = data.cameraId;
-                    return;
-                }
-                
-                if (data.type === 'audio-from-pc') {
-                    expectingPCAudioData = true;
-                    targetCameraId = data.targetCameraId;
-                    return;
-                }
-                
-                if (data.type === 'camera-init') {
-                    cameras.set(data.cameraId, {
-                        ws: ws,
-                        lastFrame: null,
-                        name: data.name || data.cameraId
-                    });
-                    ws.cameraId = data.cameraId;
-                    ws.isCamera = true;
-                    
-                    console.log(`✓ カメラ接続: ${data.name} (${data.cameraId})`);
-                    
-                    broadcastCameraList();
-                    return;
-                }
-                
-                if (data.type === 'viewer-init') {
-                    viewers.add(ws);
-                    ws.isViewer = true;
-                    
-                    console.log('✓ ビューアー接続');
-                    
-                    sendCameraList(ws);
-                    return;
-                }
-            }
-            else {
-                if (expectingVideoData) {
-                    expectingVideoData = false;
-                    const camera = cameras.get(currentCameraId);
-                    if (camera) {
-                        camera.lastFrame = message;
-                        
-                        viewers.forEach(viewer => {
-                            if (viewer.readyState === WebSocket.OPEN) {
-                                try {
-                                    viewer.send(JSON.stringify({
-                                        type: 'video',
-                                        cameraId: currentCameraId
-                                    }));
-                                    viewer.send(message);
-                                } catch (error) {
-                                    console.error('映像送信エラー:', error);
-                                }
-                            }
-                        });
-                    }
-                }
-                else if (expectingCameraAudioData) {
-                    expectingCameraAudioData = false;
-                    
-                    viewers.forEach(viewer => {
-                        if (viewer.readyState === WebSocket.OPEN) {
-                            try {
-                                viewer.send(JSON.stringify({
-                                    type: 'audio-from-camera',
-                                    cameraId: currentCameraId
-                                }));
-                                viewer.send(message);
-                            } catch (error) {
-                                console.error('音声送信エラー:', error);
-                            }
-                        }
-                    });
-                }
-                else if (expectingPCAudioData) {
-                    expectingPCAudioData = false;
-                    
-                    const camera = cameras.get(targetCameraId);
-                    if (camera && camera.ws.readyState === WebSocket.OPEN) {
-                        try {
-                            camera.ws.send(JSON.stringify({ 
-                                type: 'audio-from-pc' 
-                            }));
-                            camera.ws.send(message);
-                        } catch (error) {
-                            console.error('トーク送信エラー:', error);
-                        }
-                    }
-                }
-            }
-        } catch (error) {
-            console.error('メッセージ処理エラー:', error);
-        }
-    });
+  ws.on('message', (data, isBinary) => {
+    try {
+      if (!isBinary) {
+        // テキスト（JSON）
+        const msg = JSON.parse(data.toString());
 
-    ws.on('close', () => {
-        if (ws.isCamera && ws.cameraId) {
-            const camera = cameras.get(ws.cameraId);
-            cameras.delete(ws.cameraId);
-            console.log(`✗ カメラ切断: ${camera ? camera.name : ws.cameraId}`);
+        switch (msg.type) {
+          case 'camera-init': {
+            ws.role = 'camera';
+            ws.cameraId = msg.cameraId;
+            cameras.set(msg.cameraId, {
+              ws,
+              lastFrame: null,
+              name: msg.name || msg.cameraId,
+            });
+            console.log(`✓ カメラ接続: ${msg.name} (${msg.cameraId})`);
             broadcastCameraList();
-        }
-        if (ws.isViewer) {
-            viewers.delete(ws);
-            console.log('✗ ビューアー切断');
-        }
-    });
+            break;
+          }
 
-    ws.on('error', (error) => {
-        console.error('WebSocketエラー:', error);
-    });
+          case 'viewer-init': {
+            ws.role = 'viewer';
+            viewers.add(ws);
+            console.log('✓ ビューアー接続');
+            sendCameraList(ws);
+            break;
+          }
+
+          case 'video': {
+            // 直後のバイナリは映像フレーム
+            ws.pending = { kind: 'video', cameraId: msg.cameraId };
+            break;
+          }
+
+          case 'audio-from-camera': {
+            // 直後のバイナリはカメラ→PC音声
+            ws.pending = { kind: 'audio-from-camera', cameraId: msg.cameraId };
+            break;
+          }
+
+          case 'audio-from-pc': {
+            // 直後のバイナリはPC→カメラ音声（トーク）
+            ws.pending = { kind: 'audio-from-pc', targetCameraId: msg.targetCameraId };
+            break;
+          }
+
+          default:
+            // 未知タイプは握りつぶし
+            break;
+        }
+      } else {
+        // バイナリ到着：直前の JSON で pending を確定させている想定
+        const p = ws.pending;
+        ws.pending = null; // 一回使い切り
+
+        if (!p) return;
+
+        if (p.kind === 'video') {
+          const cam = cameras.get(p.cameraId);
+          if (cam) cam.lastFrame = data;
+
+          // 全ビューアに通知 → バイナリ
+          broadcastToViewers([
+            JSON.stringify({ type: 'video', cameraId: p.cameraId }),
+            data,
+          ]);
+        } else if (p.kind === 'audio-from-camera') {
+          // 全ビューアに通知 → バイナリ
+          broadcastToViewers([
+            JSON.stringify({ type: 'audio-from-camera', cameraId: p.cameraId }),
+            data,
+          ]);
+        } else if (p.kind === 'audio-from-pc') {
+          const cam = cameras.get(p.targetCameraId);
+          if (cam && cam.ws.readyState === WebSocket.OPEN) {
+            // カメラへ通知 → バイナリ
+            try {
+              cam.ws.send(JSON.stringify({ type: 'audio-from-pc' }));
+              cam.ws.send(data);
+            } catch (e) {
+              console.error('トーク送信エラー:', e);
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.error('メッセージ処理エラー:', err);
+    }
+  });
+
+  ws.on('close', () => {
+    if (ws.role === 'camera' && ws.cameraId) {
+      const cam = cameras.get(ws.cameraId);
+      cameras.delete(ws.cameraId);
+      console.log(`✗ カメラ切断: ${cam ? cam.name : ws.cameraId}`);
+      broadcastCameraList();
+    }
+    if (ws.role === 'viewer') {
+      viewers.delete(ws);
+      console.log('✗ ビューアー切断');
+    }
+  });
+
+  ws.on('error', (error) => {
+    console.error('WebSocketエラー:', error);
+  });
 });
 
+function broadcastToViewers(payloads /* array of buffers/strings */) {
+  viewers.forEach((viewer) => {
+    if (viewer.readyState !== WebSocket.OPEN) return;
+    try {
+      for (const p of payloads) viewer.send(p);
+    } catch (e) {
+      console.error('ビューアー送信エラー:', e);
+    }
+  });
+}
+
 function broadcastCameraList() {
-    const list = Array.from(cameras.entries()).map(([id, data]) => ({
-        id: id,
-        name: data.name
-    }));
-    
-    const message = JSON.stringify({
-        type: 'camera-list',
-        cameras: list
-    });
-    
-    viewers.forEach(viewer => {
-        if (viewer.readyState === WebSocket.OPEN) {
-            viewer.send(message);
-        }
-    });
+  const list = Array.from(cameras.entries()).map(([id, data]) => ({
+    id,
+    name: data.name,
+  }));
+  const message = JSON.stringify({ type: 'camera-list', cameras: list });
+
+  viewers.forEach((viewer) => {
+    if (viewer.readyState === WebSocket.OPEN) viewer.send(message);
+  });
 }
 
 function sendCameraList(viewer) {
-    const list = Array.from(cameras.entries()).map(([id, data]) => ({
-        id: id,
-        name: data.name
-    }));
-    
-    viewer.send(JSON.stringify({
-        type: 'camera-list',
-        cameras: list
-    }));
+  const list = Array.from(cameras.entries()).map(([id, data]) => ({
+    id,
+    name: data.name,
+  }));
+  viewer.send(JSON.stringify({ type: 'camera-list', cameras: list }));
 }
 
 setInterval(() => {
-    console.log(`接続状況 - カメラ: ${cameras.size}台 / ビューアー: ${viewers.size}台`);
+  console.log(`接続状況 - カメラ: ${cameras.size}台 / ビューアー: ${viewers.size}台`);
 }, 30000);
 
 server.listen(PORT, '0.0.0.0', () => {
-    console.log('サーバー稼働中...\n');
+  console.log('サーバー稼働中...\n');
 });
 
+// ===== Viewer HTML =====
 function getViewerHTML() {
-    return `<!DOCTYPE html>
+  return `<!DOCTYPE html>
 <html lang="ja">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OguWatcher</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: -apple-system, sans-serif;
-            background: #0f0f0f;
-            color: #fff;
-        }
-        .header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            padding: 20px 30px;
-            box-shadow: 0 2px 20px rgba(0,0,0,0.3);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .header-left {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-        }
-        .logo { font-size: 32px; }
-        .header h1 { font-size: 26px; font-weight: 700; }
-        .subtitle { font-size: 13px; opacity: 0.9; margin-top: 2px; }
-        .header-right {
-            display: flex;
-            align-items: center;
-            gap: 20px;
-        }
-        .connection-info { text-align: right; font-size: 14px; }
-        .camera-count { font-size: 24px; font-weight: 700; color: #4CAF50; }
-        .camera-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
-            gap: 20px;
-            padding: 20px;
-            min-height: calc(100vh - 160px);
-        }
-        .camera-box {
-            background: #1a1a1a;
-            border-radius: 12px;
-            overflow: hidden;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
-            position: relative;
-            transition: transform 0.2s;
-        }
-        .camera-box:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 16px rgba(0,0,0,0.6);
-        }
-        .camera-header {
-            background: #252525;
-            padding: 12px 18px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .camera-name { font-weight: 600; font-size: 15px; }
-        .camera-status {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 12px;
-        }
-        .status-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: #4CAF50;
-            animation: pulse-dot 2s infinite;
-        }
-        @keyframes pulse-dot {
-            0%, 100% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.6; transform: scale(1.1); }
-        }
-        .status-dot.offline { background: #666; animation: none; }
-        .camera-view {
-            width: 100%;
-            height: 340px;
-            background: #000;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            position: relative;
-        }
-        .camera-view img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
-        .talk-button {
-            position: absolute;
-            bottom: 15px;
-            right: 15px;
-            padding: 12px 24px;
-            background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
-            color: white;
-            border: none;
-            border-radius: 25px;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: 600;
-            box-shadow: 0 4px 12px rgba(76, 175, 80, 0.4);
-            user-select: none;
-            z-index: 10;
-            transition: all 0.2s;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        .talk-button:hover {
-            background: linear-gradient(135deg, #45a049 0%, #3d8b40 100%);
-            transform: scale(1.05);
-        }
-        .talk-button.transmitting {
-            background: linear-gradient(135deg, #f44336 0%, #d32f2f 100%);
-            animation: pulse-talk 1s infinite;
-        }
-        @keyframes pulse-talk {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.85; }
-        }
-        .footer {
-            background: #1a1a1a;
-            padding: 15px 30px;
-            text-align: center;
-            font-size: 12px;
-            color: #888;
-            border-top: 1px solid #333;
-        }
-        .no-cameras {
-            grid-column: 1 / -1;
-            text-align: center;
-            padding: 80px 20px;
-            color: #666;
-        }
-        .no-cameras-icon { font-size: 64px; margin-bottom: 20px; opacity: 0.5; }
-    </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1.0" />
+<title>OguWatcher</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,sans-serif;background:#0f0f0f;color:#fff}
+.header{background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);padding:20px 30px;display:flex;justify-content:space-between;align-items:center}
+.header-left{display:flex;align-items:center;gap:15px}
+.logo{font-size:32px}
+.header h1{font-size:26px;font-weight:700}
+.camera-count{font-size:24px;font-weight:700;color:#4CAF50}
+.camera-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(450px,1fr));gap:20px;padding:20px}
+.camera-box{background:#1a1a1a;border-radius:12px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,0.5)}
+.camera-header{background:#252525;padding:12px 18px;display:flex;justify-content:space-between}
+.camera-view{width:100%;height:340px;background:#000;position:relative}
+.camera-view img{width:100%;height:100%;object-fit:cover}
+.talk-button{position:absolute;bottom:15px;right:15px;padding:12px 24px;background:linear-gradient(135deg,#4CAF50 0%,#45a049 100%);color:#fff;border:none;border-radius:25px;cursor:pointer;font-weight:600;z-index:10}
+.talk-button.transmitting{background:linear-gradient(135deg,#f44336 0%,#d32f2f 100%)}
+.no-cameras{text-align:center;padding:80px 20px;color:#666}
+</style>
 </head>
 <body>
-    <div class="header">
-        <div class="header-left">
-            <div class="logo">📹</div>
-            <div>
-                <h1>OguWatcher</h1>
-                <div class="subtitle">そろばん教室監視システム</div>
-            </div>
-        </div>
-        <div class="header-right">
-            <div class="connection-info">
-                <div style="font-size: 12px; color: #aaa;">接続カメラ数</div>
-                <div class="camera-count" id="cameraCount">0</div>
-            </div>
-        </div>
+  <div class="header">
+    <div class="header-left">
+      <div class="logo">📹</div>
+      <div><h1>OguWatcher</h1></div>
     </div>
-    
-    <div class="camera-grid" id="cameraGrid">
-        <div class="no-cameras">
-            <div class="no-cameras-icon">📹</div>
-            <div style="font-size: 18px; margin-bottom: 10px;">カメラを待機中...</div>
-            <div style="font-size: 14px; color: #555;">iPadでカメラを接続してください</div>
-        </div>
-    </div>
-    
-    <div class="footer">
-        <div id="timestamp"></div>
-    </div>
+    <div id="cameraCount" class="camera-count">0</div>
+  </div>
 
-    <script>
-        const SERVER_URL = 'ws://' + window.location.hostname + ':${PORT}';
-        let ws = null;
-        const cameras = new Map();
-        let currentFrameCameraId = null;
-        let currentAudioCameraId = null;
-        const cameraAudios = new Map();
-        let talkingCameraId = null;
-        let talkAudioRecorder = null;
-        let talkAudioStream = null;
+  <div class="camera-grid" id="cameraGrid">
+    <div class="no-cameras">カメラを待機中...</div>
+  </div>
 
-        function init() {
-            connectWebSocket();
-            setInterval(updateTime, 1000);
-        }
+<script>
+const ws = new WebSocket('wss://' + window.location.hostname + ':${PORT}');
+const cameras = new Map();
+let currentFrameCameraId = null;
+let currentAudioCameraId = null;
 
-        function connectWebSocket() {
-            ws = new WebSocket(SERVER_URL);
-            ws.onopen = () => {
-                ws.send(JSON.stringify({ type: 'viewer-init' }));
-            };
-            ws.onmessage = (event) => {
-                if (typeof event.data === 'string') {
-                    const data = JSON.parse(event.data);
-                    if (data.type === 'camera-list') updateCameraList(data.cameras);
-                    else if (data.type === 'video') currentFrameCameraId = data.cameraId;
-                    else if (data.type === 'audio-from-camera') currentAudioCameraId = data.cameraId;
-                } else {
-                    if (currentFrameCameraId) {
-                        updateCameraImage(currentFrameCameraId, URL.createObjectURL(event.data));
-                        currentFrameCameraId = null;
-                    } else if (currentAudioCameraId) {
-                        playCameraAudio(currentAudioCameraId, event.data);
-                        currentAudioCameraId = null;
-                    }
-                }
-            };
-            ws.onclose = () => setTimeout(connectWebSocket, 3000);
-        }
+ws.onopen = () => ws.send(JSON.stringify({ type: 'viewer-init' }));
+ws.onmessage = (event) => {
+  if (typeof event.data === 'string') {
+    const data = JSON.parse(event.data);
+    if (data.type === 'camera-list') updateCameraList(data.cameras);
+    else if (data.type === 'video') currentFrameCameraId = data.cameraId;
+    else if (data.type === 'audio-from-camera') {
+      currentAudioCameraId = data.cameraId;
+      ensureAudioSink(currentAudioCameraId);
+    }
+  } else {
+    if (currentFrameCameraId) {
+      updateCameraImage(currentFrameCameraId, URL.createObjectURL(event.data));
+      currentFrameCameraId = null;
+    } else if (currentAudioCameraId) {
+      playIncomingAudio(currentAudioCameraId, event.data);
+      currentAudioCameraId = null;
+    }
+  }
+};
 
-        function updateCameraList(cameraList) {
-            const grid = document.getElementById('cameraGrid');
-            if (cameraList.length === 0) {
-                grid.innerHTML = '<div class="no-cameras"><div class="no-cameras-icon">📹</div><div style="font-size: 18px;">カメラを待機中...</div></div>';
-                document.getElementById('cameraCount').textContent = '0';
-                return;
-            }
-            cameraList.forEach(camera => {
-                if (!cameras.has(camera.id)) {
-                    cameras.set(camera.id, camera);
-                    addCameraBox(camera);
-                }
-            });
-            cameras.forEach((_, id) => {
-                if (!cameraList.find(c => c.id === id)) {
-                    removeCameraBox(id);
-                    cameras.delete(id);
-                }
-            });
-            document.getElementById('cameraCount').textContent = cameras.size;
-        }
+function updateCameraList(list) {
+  const grid = document.getElementById('cameraGrid');
+  if (list.length === 0) {
+    grid.innerHTML = '<div class="no-cameras">カメラを待機中...</div>';
+    document.getElementById('cameraCount').textContent = '0';
+    return;
+  }
+  list.forEach(cam => {
+    if (!cameras.has(cam.id)) {
+      cameras.set(cam.id, cam);
+      const box = document.createElement('div');
+      box.className = 'camera-box';
+      box.id = 'camera-' + cam.id;
+      box.innerHTML = \`
+        <div class="camera-header"><div>\${cam.name}</div></div>
+        <div class="camera-view">
+          <img id="img-\${cam.id}">
+          <button class="talk-button" id="talk-\${cam.id}"
+            onmousedown="startTalking('\${cam.id}')"
+            onmouseup="stopTalking('\${cam.id}')">🎤 話す</button>
+        </div>\`;
+      if (grid.querySelector('.no-cameras')) grid.innerHTML = '';
+      grid.appendChild(box);
+    }
+  });
+  document.getElementById('cameraCount').textContent = cameras.size;
+}
 
-        function addCameraBox(camera) {
-            const grid = document.getElementById('cameraGrid');
-            const noCamera = grid.querySelector('.no-cameras');
-            if (noCamera) noCamera.remove();
-            const box = document.createElement('div');
-            box.className = 'camera-box';
-            box.id = 'camera-' + camera.id;
-            box.innerHTML = \\\`
-                <div class="camera-header">
-                    <div class="camera-name">\\\${camera.name}</div>
-                    <div class="camera-status"><div class="status-dot"></div><span>オンライン</span></div>
-                </div>
-                <div class="camera-view">
-                    <img id="img-\\\${camera.id}">
-                    <button class="talk-button" id="talk-\\\${camera.id}"
-                            onmousedown="startTalking('\\\${camera.id}')"
-                            onmouseup="stopTalking('\\\${camera.id}')">
-                        <span>🎤</span><span>話す</span>
-                    </button>
-                </div>
-            \\\`;
-            grid.appendChild(box);
-        }
+function updateCameraImage(id, url) {
+  const img = document.getElementById('img-' + id);
+  if (!img) return;
+  if (img.src && img.src.startsWith('blob:')) URL.revokeObjectURL(img.src);
+  img.src = url;
+}
 
-        function removeCameraBox(id) {
-            const box = document.getElementById('camera-' + id);
-            if (box) box.remove();
-        }
+// ===== PC -> カメラ トーク =====
+let talkingCameraId = null;
+let talkRecorder = null;
+let talkStream = null;
 
-        function updateCameraImage(id, url) {
-            const img = document.getElementById('img-' + id);
-            if (img) {
-                if (img.src && img.src.startsWith('blob:')) URL.revokeObjectURL(img.src);
-                img.src = url;
-            }
-        }
+async function startTalking(id) {
+  if (talkingCameraId) return;
+  try {
+    talkStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    // ブラウザ差異を吸収（指定なしでOKなケースが多い）
+    talkRecorder = new MediaRecorder(talkStream);
+    talkRecorder.ondataavailable = (e) => {
+      if (e.data.size > 0) {
+        ws.send(JSON.stringify({ type: 'audio-from-pc', targetCameraId: id }));
+        ws.send(e.data);
+      }
+    };
+    talkRecorder.start(100);
+    talkingCameraId = id;
+    const btn = document.getElementById('talk-' + id);
+    if (btn) { btn.classList.add('transmitting'); btn.textContent = '🔴 送信中'; }
+  } catch (e) { alert('マイクエラー'); }
+}
+function stopTalking(id) {
+  if (!talkingCameraId) return;
+  if (talkRecorder) talkRecorder.stop();
+  if (talkStream) talkStream.getTracks().forEach(t => t.stop());
+  talkingCameraId = null;
+  const btn = document.getElementById('talk-' + id);
+  if (btn) { btn.classList.remove('transmitting'); btn.textContent = '🎤 話す'; }
+}
 
-        function playCameraAudio(id, blob) {
-            let audio = cameraAudios.get(id);
-            if (!audio) {
-                audio = new Audio();
-                audio.volume = 0.8;
-                cameraAudios.set(id, audio);
-            }
-            audio.src = URL.createObjectURL(blob);
-            audio.play().catch(() => {});
-        }
-
-        async function startTalking(id) {
-            if (talkingCameraId) return;
-            try {
-                talkAudioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                talkAudioRecorder = new MediaRecorder(talkAudioStream);
-                talkAudioRecorder.ondataavailable = (e) => {
-                    if (e.data.size > 0 && ws.readyState === WebSocket.OPEN) {
-                        ws.send(JSON.stringify({ type: 'audio-from-pc', targetCameraId: id }));
-                        ws.send(e.data);
-                    }
-                };
-                talkAudioRecorder.start(100);
-                talkingCameraId = id;
-                const btn = document.getElementById('talk-' + id);
-                btn.classList.add('transmitting');
-                btn.innerHTML = '<span>🔴</span><span>送信中</span>';
-            } catch (e) {
-                alert('マイクエラー: ' + e.message);
-            }
-        }
-
-        function stopTalking(id) {
-            if (!talkingCameraId) return;
-            if (talkAudioRecorder) talkAudioRecorder.stop();
-            if (talkAudioStream) talkAudioStream.getTracks().forEach(t => t.stop());
-            talkingCameraId = null;
-            const btn = document.getElementById('talk-' + id);
-            btn.classList.remove('transmitting');
-            btn.innerHTML = '<span>🎤</span><span>話す</span>';
-        }
-
-        function updateTime() {
-            document.getElementById('timestamp').textContent = new Date().toLocaleString('ja-JP');
-        }
-
-        window.addEventListener('load', init);
-    </script>
+// ===== カメラ -> PC 音声再生 =====
+const audioEls = new Map();
+function ensureAudioSink(id) {
+  if (!audioEls.has(id)) {
+    const el = new Audio();
+    el.autoplay = true;
+    el.playsInline = true;
+    el.muted = false;
+    audioEls.set(id, el);
+  }
+}
+function playIncomingAudio(id, blob) {
+  const el = audioEls.get(id);
+  if (!el) return;
+  const url = URL.createObjectURL(blob);
+  el.src = url;
+  el.onended = () => URL.revokeObjectURL(url);
+}
+</script>
 </body>
 </html>`;
 }
