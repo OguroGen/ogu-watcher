@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <title>OguWatcher カメラ</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: -apple-system, sans-serif;
+            background: #000;
+            color: #fff;
+            overflow: hidden;
+        }
+        .setup-screen {
+            padding: 20px;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .logo {
+            font-size: 48px;
+            margin-bottom: 10px;
+        }
+        .setup-screen h1 {
+            font-size: 28px;
+            margin-bottom: 30px;
+            font-weight: 700;
+        }
+        .setup-form {
+            background: rgba(255,255,255,0.95);
+            padding: 35px;
+            border-radius: 20px;
+            max-width: 400px;
+            width: 100%;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            color: #333;
+        }
+        .form-group {
+            margin-bottom: 25px;
+            text-align: left;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            color: #555;
+        }
+        .form-group input {
+            width: 100%;
+            padding: 14px;
+            border: 2px solid #ddd;
+            border-radius: 10px;
+            background: white;
+            color: #333;
+            font-size: 16px;
+            transition: border 0.3s;
+        }
+        .form-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        .connect-btn {
+            width: 100%;
+            padding: 16px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 10px;
+            color: white;
+            font-size: 18px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        .connect-btn:active {
+            transform: scale(0.98);
+        }
+        .help-text {
+            margin-top: 20px;
+            font-size: 12px;
+            color: rgba(255,255,255,0.8);
+            line-height: 1.6;
+        }
+        .camera-screen {
+            display: none;
+        }
+        .camera-screen.active {
+            display: block;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 15px;
+            text-align: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        }
+        .header h1 { 
+            font-size: 20px; 
+            font-weight: 700;
+        }
+        .camera-id { 
+            font-size: 12px; 
+            opacity: 0.9; 
+            margin-top: 5px; 
+        }
+        .video-container {
+            height: calc(100vh - 110px);
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        #video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .status {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0,0,0,0.8);
+            padding: 10px 15px;
+            border-radius: 20px;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #4CAF50;
+            animation: pulse 2s infinite;
+        }
+        .status-dot.disconnected { 
+            background: #f44336; 
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .settings-btn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(0,0,0,0.8);
+            border: none;
+            color: white;
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            font-size: 22px;
+            cursor: pointer;
+        }
+        .settings-panel {
+            position: absolute;
+            top: 75px;
+            right: 20px;
+            background: rgba(0,0,0,0.95);
+            padding: 20px;
+            border-radius: 12px;
+            min-width: 250px;
+            display: none;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+        }
+        .settings-panel.show { display: block; }
+        .settings-panel label {
+            display: block;
+            font-size: 13px;
+            margin-bottom: 8px;
+            color: #aaa;
+        }
+        .settings-panel select {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 15px;
+            background: #333;
+            color: white;
+            border: 1px solid #555;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+        .settings-panel button {
+            width: 100%;
+            padding: 12px;
+            background: #f44336;
+            border: none;
+            border-radius: 6px;
+            color: white;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .footer {
+            background: #1a1a1a;
+            padding: 12px;
+            text-align: center;
+            font-size: 11px;
+            color: #888;
+        }
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+        }
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid rgba(255,255,255,0.1);
+            border-top-color: #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        @keyframes spin { 
+            to { transform: rotate(360deg); } 
+        }
+        .error {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            padding: 20px;
+        }
+        .talk-indicator {
+            display: none;
+            position: fixed;
+            top: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(76, 175, 80, 0.95);
+            color: white;
+            padding: 15px 30px;
+            border-radius: 25px;
+            font-size: 16px;
+            font-weight: 600;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            z-index: 9999;
+            animation: slideDown 0.3s ease;
+        }
+        @keyframes slideDown {
+            from { transform: translate(-50%, -20px); opacity: 0; }
+            to { transform: translate(-50%, 0); opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+    <!-- セットアップ画面 -->
+    <div class="setup-screen" id="setupScreen">
+        <div class="logo">📹</div>
+        <h1>OguWatcher</h1>
+        
+        <div class="setup-form">
+            <div class="form-group">
+                <label>PCのIPアドレス</label>
+                <input type="text" id="serverIP" placeholder="例: 192.168.1.100" value="">
+            </div>
+            
+            <div class="form-group">
+                <label>カメラ名（任意）</label>
+                <input type="text" id="cameraName" placeholder="例: 入口カメラ">
+            </div>
+            
+            <button class="connect-btn" onclick="connect()">接続</button>
+            
+            <div class="help-text">
+                ※PCでOguWatcherを起動すると表示されるIPアドレスを入力してください<br>
+                ※同じWiFiネットワークに接続している必要があります
+            </div>
+        </div>
+    </div>
+
+    <!-- カメラ画面 -->
+    <div class="camera-screen" id="cameraScreen">
+        <div class="header">
+            <h1>📹 OguWatcher</h1>
+            <div class="camera-id" id="cameraId"></div>
+        </div>
+        
+        <div class="video-container">
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <div>カメラ起動中...</div>
+            </div>
+            
+            <video id="video" autoplay playsinline muted></video>
+            
+            <div class="status" id="status" style="display:none;">
+                <div class="status-dot" id="statusDot"></div>
+                <span id="statusText">接続中...</span>
+            </div>
+            
+            <button class="settings-btn" onclick="toggleSettings()">⚙️</button>
+            
+            <div class="settings-panel" id="settingsPanel">
+                <label>
+                    画質設定
+                    <select id="qualitySelect" onchange="changeQuality()">
+                        <option value="low">低画質・低遅延（推奨）</option>
+                        <option value="medium">標準画質</option>
+                        <option value="high">高画質</option>
+                    </select>
+                </label>
+                <button onclick="disconnect()">切断</button>
+            </div>
+
+            <div class="error" id="error" style="display:none;">
+                <div style="font-size:48px;">⚠️</div>
+                <div id="errorMessage"></div>
+            </div>
+        </div>
+        
+        <div class="footer">
+            <div id="timestamp"></div>
+        </div>
+    </div>
+
+    <!-- トーク通知 -->
+    <div class="talk-indicator" id="talkIndicator">
+        🔊 話しかけられています
+    </div>
+
+    <script>
+        const cameraId = generateCameraId();
+        let ws = null;
+        let stream = null;
+        let videoStreamInterval = null;
+        let audioRecorder = null;
+        let expectingPCAudio = false;
+        let pcAudio = null;
+
+        const qualityPresets = {
+            low: { width: 480, height: 270, fps: 15, quality: 0.5 },
+            medium: { width: 640, height: 360, fps: 20, quality: 0.65 },
+            high: { width: 1280, height: 720, fps: 30, quality: 0.75 }
+        };
+
+        function generateCameraId() {
+            let id = localStorage.getItem('cameraId');
+            if (!id) {
+                id = 'CAM-' + Math.random().toString(36).substr(2, 6).toUpperCase();
+                localStorage.setItem('cameraId', id);
+            }
+            return id;
+        }
+
+        window.addEventListener('load', () => {
+            const savedIP = localStorage.getItem('serverIP');
+            const savedName = localStorage.getItem('cameraName');
+            
+            if (savedIP) {
+                document.getElementById('serverIP').value = savedIP;
+            }
+            if (savedName) {
+                document.getElementById('cameraName').value = savedName;
+            }
+        });
+
+        async function connect() {
+            const serverIP = document.getElementById('serverIP').value.trim();
+            const cameraName = document.getElementById('cameraName').value.trim() || cameraId;
+            
+            if (!serverIP) {
+                alert('PCのIPアドレスを入力してください');
+                return;
+            }
+
+            localStorage.setItem('serverIP', serverIP);
+            localStorage.setItem('cameraName', cameraName);
+
+            document.getElementById('setupScreen').style.display = 'none';
+            document.getElementById('cameraScreen').classList.add('active');
+            document.getElementById('cameraId').textContent = `カメラID: ${cameraName}`;
+
+            try {
+                // カメラとマイクを取得
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        facingMode: 'environment',
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    },
+                    audio: true  // 音声も取得
+                });
+
+                document.getElementById('video').srcObject = stream;
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('status').style.display = 'flex';
+
+                connectWebSocket(serverIP, cameraName);
+                
+                setInterval(updateTime, 1000);
+
+            } catch (error) {
+                showError('カメラまたはマイクにアクセスできません: ' + error.message);
+            }
+        }
+
+        function connectWebSocket(serverIP, cameraName) {
+            const wsUrl = `ws://${serverIP}:8080`;
+            ws = new WebSocket(wsUrl);
+
+            ws.onopen = () => {
+                console.log('WebSocket接続成功');
+                updateStatus('配信中', true);
+                
+                // カメラ初期化
+                ws.send(JSON.stringify({
+                    type: 'camera-init',
+                    cameraId: cameraId,
+                    name: cameraName
+                }));
+
+                // 映像送信開始
+                startVideoStreaming();
+                
+                // 音声送信開始
+                startAudioStreaming();
+            };
+
+            ws.onmessage = (event) => {
+                if (typeof event.data === 'string') {
+                    const data = JSON.parse(event.data);
+                    
+                    // PCからの音声通知
+                    if (data.type === 'audio-from-pc') {
+                        expectingPCAudio = true;
+                        showTalkIndicator();
+                    }
+                } else {
+                    // バイナリデータ
+                    if (expectingPCAudio) {
+                        expectingPCAudio = false;
+                        playPCAudio(event.data);
+                    }
+                }
+            };
+
+            ws.onerror = (error) => {
+                console.error('WebSocketエラー:', error);
+                updateStatus('接続エラー', false);
+                alert('サーバーに接続できません。IPアドレスを確認してください。');
+            };
+
+            ws.onclose = () => {
+                console.log('WebSocket切断');
+                updateStatus('再接続中...', false);
+                setTimeout(() => connectWebSocket(serverIP, cameraName), 3000);
+            };
+        }
+
+        function startVideoStreaming() {
+            const video = document.getElementById('video');
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            
+            const quality = document.getElementById('qualitySelect').value;
+            const preset = qualityPresets[quality];
+            
+            canvas.width = preset.width;
+            canvas.height = preset.height;
+
+            const interval = 1000 / preset.fps;
+
+            videoStreamInterval = setInterval(() => {
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                    canvas.toBlob((blob) => {
+                        if (blob) {
+                            ws.send(JSON.stringify({ 
+                                type: 'video',
+                                cameraId: cameraId 
+                            }));
+                            ws.send(blob);
+                        }
+                    }, 'image/jpeg', preset.quality);
+                }
+            }, interval);
+        }
+
+        function startAudioStreaming() {
+            audioRecorder = new MediaRecorder(stream, {
+                mimeType: 'audio/webm;codecs=opus',
+                audioBitsPerSecond: 32000
+            });
+            
+            audioRecorder.ondataavailable = (e) => {
+                if (e.data.size > 0 && ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ 
+                        type: 'audio-from-camera',
+                        cameraId: cameraId 
+                    }));
+                    ws.send(e.data);
+                }
+            };
+            
+            audioRecorder.start(100);  // 100msごとに送信
+        }
+
+        function playPCAudio(audioBlob) {
+            if (!pcAudio) {
+                pcAudio = new Audio();
+                pcAudio.volume = 1.0;
+            }
+            const audioUrl = URL.createObjectURL(audioBlob);
+            pcAudio.src = audioUrl;
+            pcAudio.play().catch(err => {
+                console.error('音声再生エラー:', err);
+            });
+        }
+
+        function showTalkIndicator() {
+            const indicator = document.getElementById('talkIndicator');
+            indicator.style.display = 'block';
+            setTimeout(() => {
+                indicator.style.display = 'none';
+            }, 2000);
+        }
+
+        function changeQuality() {
+            if (videoStreamInterval) {
+                clearInterval(videoStreamInterval);
+            }
+            startVideoStreaming();
+        }
+
+        function disconnect() {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+            }
+            if (ws) {
+                ws.close();
+            }
+            if (videoStreamInterval) {
+                clearInterval(videoStreamInterval);
+            }
+            if (audioRecorder) {
+                audioRecorder.stop();
+            }
+            
+            document.getElementById('setupScreen').style.display = 'flex';
+            document.getElementById('cameraScreen').classList.remove('active');
+        }
+
+        function toggleSettings() {
+            document.getElementById('settingsPanel').classList.toggle('show');
+        }
+
+        function updateStatus(text, connected) {
+            document.getElementById('statusText').textContent = text;
+            const dot = document.getElementById('statusDot');
+            if (connected) {
+                dot.classList.remove('disconnected');
+            } else {
+                dot.classList.add('disconnected');
+            }
+        }
+
+        function showError(message) {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('error').style.display = 'block';
+            document.getElementById('errorMessage').textContent = message;
+        }
+
+        function updateTime() {
+            const now = new Date();
+            document.getElementById('timestamp').textContent = now.toLocaleTimeString('ja-JP');
+        }
+    </script>
+</body>
+</html>

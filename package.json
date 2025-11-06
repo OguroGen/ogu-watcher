@@ -1,0 +1,29 @@
+{
+    "name": "ogu-watcher",
+    "version": "1.0.0",
+    "description": "OguWatcher - そろばん教室向け監視カメラシステム",
+    "main": "server-https.js",
+    "bin": "server-https.js",
+    "scripts": {
+      "start": "node server-https.js",
+      "build": "pkg . --targets node18-win-x64 --output OguWatcher.exe"
+    },
+    "dependencies": {
+      "express": "^4.18.2",
+      "ws": "^8.13.0",
+      "cors": "^2.8.5"
+    },
+    "devDependencies": {
+      "pkg": "^5.8.0"
+    },
+    "pkg": {
+      "assets": [
+        "camera.html",
+        "private-key.pem",
+        "certificate.pem"
+      ]
+    },
+    "keywords": ["soroban", "camera"],
+    "author": "",
+    "license": "Commercial"
+  }
