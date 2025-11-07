@@ -66,7 +66,7 @@ app.get('/viewer', (_req, res) => {
 // 接続単位の状態を持つ
 function initWsState(ws) {
   ws.role = null; // 'camera' | 'viewer'
-  ws.pending = null; // 直後のバイナリが何か: { kind: 'video'|'audio-from-camera'|'audio-from-pc', cameraId?, targetCameraId? }
+  ws.pending = null; // 直後のバイナリが何か: { kind: 'video', cameraId? }
   ws.cameraId = null;
 }
 
@@ -108,18 +108,6 @@ wss.on('connection', (ws, req) => {
             break;
           }
 
-          case 'audio-from-camera': {
-            // 直後のバイナリはカメラ→PC音声
-            ws.pending = { kind: 'audio-from-camera', cameraId: msg.cameraId };
-            break;
-          }
-
-          case 'audio-from-pc': {
-            // 直後のバイナリはPC→カメラ音声（トーク）
-            ws.pending = { kind: 'audio-from-pc', targetCameraId: msg.targetCameraId };
-            break;
-          }
-
           default:
             // 未知タイプは握りつぶし
             break;
@@ -140,24 +128,7 @@ wss.on('connection', (ws, req) => {
             JSON.stringify({ type: 'video', cameraId: p.cameraId }),
             data,
           ]);
-        } else if (p.kind === 'audio-from-camera') {
-          // 全ビューアに通知 → バイナリ
-          broadcastToViewers([
-            JSON.stringify({ type: 'audio-from-camera', cameraId: p.cameraId }),
-            data,
-          ]);
-        } else if (p.kind === 'audio-from-pc') {
-          const cam = cameras.get(p.targetCameraId);
-          if (cam && cam.ws.readyState === WebSocket.OPEN) {
-            // カメラへ通知 → バイナリ
-            try {
-              cam.ws.send(JSON.stringify({ type: 'audio-from-pc' }));
-              cam.ws.send(data);
-            } catch (e) {
-              console.error('トーク送信エラー:', e);
-            }
-          }
-        }
+        } 
       }
     } catch (err) {
       console.error('メッセージ処理エラー:', err);
@@ -242,8 +213,6 @@ body{font-family:-apple-system,sans-serif;background:#0f0f0f;color:#fff}
 .camera-header{background:#252525;padding:12px 18px;display:flex;justify-content:space-between}
 .camera-view{width:70vw;aspect-ratio: 16 / 9;background:#000;position:relative}
 .camera-view img{width:100%;height:100%;object-fit:cover}
-.talk-button{position:absolute;bottom:15px;right:15px;padding:12px 24px;background:linear-gradient(135deg,#4CAF50 0%,#45a049 100%);color:#fff;border:none;border-radius:25px;cursor:pointer;font-weight:600;z-index:10}
-.talk-button.transmitting{background:linear-gradient(135deg,#f44336 0%,#d32f2f 100%)}
 .no-cameras{text-align:center;padding:80px 20px;color:#666}
 </style>
 </head>
@@ -304,9 +273,6 @@ function updateCameraList(list) {
         <div class="camera-header"><div>\${cam.name}</div></div>
         <div class="camera-view">
           <img id="img-\${cam.id}">
-          <button class="talk-button" id="talk-\${cam.id}"
-            onmousedown="startTalking('\${cam.id}')"
-            onmouseup="stopTalking('\${cam.id}')">🎤 話す</button>
         </div>\`;
       if (grid.querySelector('.no-cameras')) grid.innerHTML = '';
       grid.appendChild(box);
@@ -322,56 +288,6 @@ function updateCameraImage(id, url) {
   img.src = url;
 }
 
-// ===== PC -> カメラ トーク =====
-let talkingCameraId = null;
-let talkRecorder = null;
-let talkStream = null;
-
-async function startTalking(id) {
-  if (talkingCameraId) return;
-  try {
-    talkStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    // ブラウザ差異を吸収（指定なしでOKなケースが多い）
-    talkRecorder = new MediaRecorder(talkStream);
-    talkRecorder.ondataavailable = (e) => {
-      if (e.data.size > 0) {
-        ws.send(JSON.stringify({ type: 'audio-from-pc', targetCameraId: id }));
-        ws.send(e.data);
-      }
-    };
-    talkRecorder.start(100);
-    talkingCameraId = id;
-    const btn = document.getElementById('talk-' + id);
-    if (btn) { btn.classList.add('transmitting'); btn.textContent = '🔴 送信中'; }
-  } catch (e) { alert('マイクエラー'); }
-}
-function stopTalking(id) {
-  if (!talkingCameraId) return;
-  if (talkRecorder) talkRecorder.stop();
-  if (talkStream) talkStream.getTracks().forEach(t => t.stop());
-  talkingCameraId = null;
-  const btn = document.getElementById('talk-' + id);
-  if (btn) { btn.classList.remove('transmitting'); btn.textContent = '🎤 話す'; }
-}
-
-// ===== カメラ -> PC 音声再生 =====
-const audioEls = new Map();
-function ensureAudioSink(id) {
-  if (!audioEls.has(id)) {
-    const el = new Audio();
-    el.autoplay = true;
-    el.playsInline = true;
-    el.muted = false;
-    audioEls.set(id, el);
-  }
-}
-function playIncomingAudio(id, blob) {
-  const el = audioEls.get(id);
-  if (!el) return;
-  const url = URL.createObjectURL(blob);
-  el.src = url;
-  el.onended = () => URL.revokeObjectURL(url);
-}
 </script>
 </body>
 </html>`;
