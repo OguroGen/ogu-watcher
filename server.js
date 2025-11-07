@@ -240,7 +240,7 @@ body{font-family:-apple-system,sans-serif;background:#0f0f0f;color:#fff}
 .camera-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(450px,1fr));gap:20px;padding:20px}
 .camera-box{background:#1a1a1a;border-radius:12px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,0.5)}
 .camera-header{background:#252525;padding:12px 18px;display:flex;justify-content:space-between}
-.camera-view{width:100%;height:340px;background:#000;position:relative}
+.camera-view{width:70vw;aspect-ratio: 16 / 9;background:#000;position:relative}
 .camera-view img{width:100%;height:100%;object-fit:cover}
 .talk-button{position:absolute;bottom:15px;right:15px;padding:12px 24px;background:linear-gradient(135deg,#4CAF50 0%,#45a049 100%);color:#fff;border:none;border-radius:25px;cursor:pointer;font-weight:600;z-index:10}
 .talk-button.transmitting{background:linear-gradient(135deg,#f44336 0%,#d32f2f 100%)}
