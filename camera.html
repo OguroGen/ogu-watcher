@@ -10,39 +10,182 @@
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
     body{font-family:-apple-system,sans-serif;background:#000;color:#fff;overflow:hidden}
-    .setup-screen{padding:20px;text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%)}
+    .setup-screen{
+      padding:20px;
+      text-align:center;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      min-height:100vh;
+      background:linear-gradient(135deg,#667eea 0%,#764ba2 100%)
+    }
     .logo{font-size:48px;margin-bottom:10px}
     .setup-screen h1{font-size:28px;margin-bottom:30px;font-weight:700}
-    .setup-form{background:rgba(255,255,255,0.95);padding:35px;border-radius:20px;max-width:400px;width:100%;box-shadow:0 10px 40px rgba(0,0,0,0.3);color:#333}
+    .setup-form{
+      background:rgba(255,255,255,0.95);
+      padding:35px;
+      border-radius:20px;
+      max-width:400px;
+      width:100%;
+      box-shadow:0 10px 40px rgba(0,0,0,0.3);
+      color:#333
+    }
     .form-group{margin-bottom:25px;text-align:left}
-    .form-group label{display:block;margin-bottom:8px;font-size:14px;font-weight:600;color:#555}
-    .form-group input{width:100%;padding:14px;border:2px solid #ddd;border-radius:10px;background:#fff;color:#333;font-size:16px;transition:border .3s}
+    .form-group label{
+      display:block;
+      margin-bottom:8px;
+      font-size:14px;
+      font-weight:600;
+      color:#555
+    }
+    .form-group input{
+      width:100%;
+      padding:14px;
+      border:2px solid #ddd;
+      border-radius:10px;
+      background:#fff;
+      color:#333;
+      font-size:16px;
+      transition:border .3s
+    }
     .form-group input:focus{outline:none;border-color:#667eea}
-    .connect-btn{width:100%;padding:16px;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);border:none;border-radius:10px;color:#fff;font-size:18px;font-weight:700;cursor:pointer;transition:transform .2s}
+    .connect-btn{
+      width:100%;
+      padding:16px;
+      background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);
+      border:none;
+      border-radius:10px;
+      color:#fff;
+      font-size:18px;
+      font-weight:700;
+      cursor:pointer;
+      transition:transform .2s
+    }
     .connect-btn:active{transform:scale(.98)}
-    .help-text{margin-top:20px;font-size:12px;color:rgba(0,0,0,.7);line-height:1.6}
+    .help-text{
+      margin-top:20px;
+      font-size:12px;
+      color:rgba(0,0,0,.7);
+      line-height:1.6
+    }
     .camera-screen{display:none}
     .camera-screen.active{display:block}
-    .header{background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);padding:15px;text-align:center;box-shadow:0 2px 10px rgba(0,0,0,.3)}
+    .header{
+      background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);
+      padding:15px;
+      text-align:center;
+      box-shadow:0 2px 10px rgba(0,0,0,.3)
+    }
     .header h1{font-size:20px;font-weight:700}
     .camera-id{font-size:12px;opacity:.9;margin-top:5px}
-    .video-container{height:calc(100vh - 110px);position:relative;display:flex;align-items:center;justify-content:center}
+    .video-container{
+      height:calc(100vh - 110px);
+      position:relative;
+      display:flex;
+      align-items:center;
+      justify-content:center
+    }
     #video{width:100%;height:100%;object-fit:cover}
-    .status{position:absolute;top:20px;left:20px;background:rgba(0,0,0,.8);padding:10px 15px;border-radius:20px;font-size:13px;display:flex;align-items:center;gap:8px}
-    .status-dot{width:10px;height:10px;border-radius:50%;background:#4CAF50;animation:pulse 2s infinite}
+    .status{
+      position:absolute;
+      top:20px;
+      left:20px;
+      background:rgba(0,0,0,.8);
+      padding:10px 15px;
+      border-radius:20px;
+      font-size:13px;
+      display:flex;
+      align-items:center;
+      gap:8px
+    }
+    .status-dot{
+      width:10px;
+      height:10px;
+      border-radius:50%;
+      background:#4CAF50;
+      animation:pulse 2s infinite
+    }
     .status-dot.disconnected{background:#f44336}
     @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
-    .settings-btn{position:absolute;top:20px;right:20px;background:rgba(0,0,0,.8);border:none;color:#fff;width:44px;height:44px;border-radius:50%;font-size:22px;cursor:pointer}
-    .settings-panel{position:absolute;top:75px;right:20px;background:rgba(0,0,0,.95);padding:20px;border-radius:12px;min-width:250px;display:none;box-shadow:0 4px 20px rgba(0,0,0,.5)}
+    .settings-btn{
+      position:absolute;
+      top:20px;
+      right:20px;
+      background:rgba(0,0,0,.8);
+      border:none;
+      color:#fff;
+      width:44px;
+      height:44px;
+      border-radius:50%;
+      font-size:22px;
+      cursor:pointer
+    }
+    .settings-panel{
+      position:absolute;
+      top:75px;
+      right:20px;
+      background:rgba(0,0,0,.95);
+      padding:20px;
+      border-radius:12px;
+      min-width:250px;
+      display:none;
+      box-shadow:0 4px 20px rgba(0,0,0,.5)
+    }
     .settings-panel.show{display:block}
     .settings-panel label{display:block;font-size:13px;margin-bottom:8px;color:#aaa}
-    .settings-panel select{width:100%;padding:10px;margin-bottom:15px;background:#333;color:#fff;border:1px solid #555;border-radius:6px;font-size:14px}
-    .settings-panel button{width:100%;padding:12px;background:#f44336;border:none;border-radius:6px;color:#fff;font-weight:600;cursor:pointer}
-    .footer{background:#1a1a1a;padding:12px;text-align:center;font-size:11px;color:#888}
-    .loading{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center}
-    .spinner{width:50px;height:50px;border:4px solid rgba(255,255,255,.1);border-top-color:#667eea;border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 20px}
+    .settings-panel select{
+      width:100%;
+      padding:10px;
+      margin-bottom:15px;
+      background:#333;
+      color:#fff;
+      border:1px solid #555;
+      border-radius:6px;
+      font-size:14px
+    }
+    .settings-panel button{
+      width:100%;
+      padding:12px;
+      background:#f44336;
+      border:none;
+      border-radius:6px;
+      color:#fff;
+      font-weight:600;
+      cursor:pointer
+    }
+    .footer{
+      background:#1a1a1a;
+      padding:12px;
+      text-align:center;
+      font-size:11px;
+      color:#888
+    }
+    .loading{
+      position:absolute;
+      top:50%;
+      left:50%;
+      transform:translate(-50%,-50%);
+      text-align:center
+    }
+    .spinner{
+      width:50px;
+      height:50px;
+      border:4px solid rgba(255,255,255,.1);
+      border-top-color:#667eea;
+      border-radius:50%;
+      animation:spin 1s linear infinite;
+      margin:0 auto 20px
+    }
     @keyframes spin{to{transform:rotate(360deg)}}
-    .error{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;padding:20px}
+    .error{
+      position:absolute;
+      top:50%;
+      left:50%;
+      transform:translate(-50%,-50%);
+      text-align:center;
+      padding:20px
+    }
   </style>
 </head>
 <body>
@@ -111,11 +254,13 @@
       <div id="timestamp"></div>
     </div>
   </div>
+
 <script>
 const cameraId = generateCameraId();
 let ws = null;
 let stream = null;
-let videoStreamInterval = null;
+let videoLoopStopFn = null;
+let isStreaming = false;
 
 const qualityPresets = {
   low:    { width: 480,  height: 270, fps: 15, quality: 0.5 },
@@ -152,9 +297,15 @@ async function connect() {
   document.getElementById('cameraId').textContent = `カメラID: ${cameraName}`;
 
   try {
+    // 監視用途なのでバックカメラ優先
     stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } }
+      video: {
+        facingMode: { ideal: 'environment' },
+        width:  { ideal: 1280 },
+        height: { ideal: 720 }
+      }
     });
+
     document.getElementById('video').srcObject = stream;
     document.getElementById('loading').style.display = 'none';
     document.getElementById('status').style.display = 'flex';
@@ -180,7 +331,8 @@ function connectWebSocket(serverIP, cameraName) {
 
   ws.onmessage = (event) => {
     if (typeof event.data === 'string') {
-      const data = JSON.parse(event.data);
+      // 今は特に受信するものはないが、将来用にパースだけしておく
+      try { JSON.parse(event.data); } catch {}
     }
   };
 
@@ -192,43 +344,121 @@ function connectWebSocket(serverIP, cameraName) {
   ws.onclose = () => {
     console.log('WebSocket切断');
     updateStatus('再接続中...', false);
-    setTimeout(() => connectWebSocket(serverIP, cameraName), 3000);
+    if (videoLoopStopFn) videoLoopStopFn();
+    // stream が生きているときだけ再接続を試みる
+    if (stream) {
+      setTimeout(() => connectWebSocket(serverIP, cameraName), 3000);
+    }
   };
 }
 
+// Safari 対策付き toBlob
+function canvasToBlob(canvas, quality, cb) {
+  if (canvas.toBlob) {
+    canvas.toBlob(cb, 'image/jpeg', quality);
+  } else {
+    // フォールバック: dataURL -> Blob
+    const dataURL = canvas.toDataURL('image/jpeg', quality);
+    const byteString = atob(dataURL.split(',')[1]);
+    const mimeString = dataURL.split(',')[0].split(':')[1].split(';')[0];
+    const ab = new ArrayBuffer(byteString.length);
+    const ia = new Uint8Array(ab);
+    for (let i = 0; i < byteString.length; i++) {
+      ia[i] = byteString.charCodeAt(i);
+    }
+    cb(new Blob([ab], { type: mimeString }));
+  }
+}
+
+function isVideoReady(video) {
+  // HAVE_ENOUGH_DATA(=4) くらいまで待つと黒フレームを減らせる
+  return video.readyState >= video.HAVE_ENOUGH_DATA;
+}
+
 function startVideoStreaming() {
+  if (isStreaming) return; // 二重起動防止
+  if (!stream) return;
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+
+  isStreaming = true;
+
   const video = document.getElementById('video');
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
-  const quality = document.getElementById('qualitySelect').value;
-  const preset = qualityPresets[quality];
+  const getPreset = () => {
+    const q = document.getElementById('qualitySelect').value;
+    return qualityPresets[q] || qualityPresets.medium;
+  };
 
-  canvas.width = preset.width;
-  canvas.height = preset.height;
-  const interval = 1000 / preset.fps;
+  let stopped = false;
+  videoLoopStopFn = () => {
+    stopped = true;
+    isStreaming = false;
+  };
 
-  videoStreamInterval = setInterval(() => {
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      canvas.toBlob((blob) => {
-        if (!blob) return;
-        ws.send(JSON.stringify({ type: 'video', cameraId }));
-        ws.send(blob);
-      }, 'image/jpeg', preset.quality);
+  function loop() {
+    if (stopped || !ws || ws.readyState !== WebSocket.OPEN) return;
+
+    const preset = getPreset();
+
+    // 解像度を品質設定に追従
+    if (canvas.width !== preset.width)  canvas.width  = preset.width;
+    if (canvas.height !== preset.height) canvas.height = preset.height;
+
+    if (!isVideoReady(video)) {
+      // カメラ起動直後などデータがまだのときは少し待つ
+      setTimeout(loop, 50);
+      return;
     }
-  }, interval);
+
+    // WebSocket送信バッファがパンパンなら少し待ってから次へ
+    if (ws.bufferedAmount > 3 * 1024 * 1024) {
+      setTimeout(loop, 100);
+      return;
+    }
+
+    const targetMs = 1000 / preset.fps;
+    const t0 = performance.now();
+
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    canvasToBlob(canvas, preset.quality, (blob) => {
+      if (!blob || stopped || !ws || ws.readyState !== WebSocket.OPEN) {
+        return;
+      }
+
+      // 1フレームごとに JSON → バイナリ のペアを送信
+      ws.send(JSON.stringify({ type: 'video', cameraId }));
+      ws.send(blob);
+
+      const elapsed = performance.now() - t0;
+      const wait = Math.max(10, targetMs - Math.min(elapsed, targetMs - 10));
+      setTimeout(loop, wait);
+    });
+  }
+
+  loop();
 }
 
 function changeQuality() {
-  if (videoStreamInterval) clearInterval(videoStreamInterval);
+  if (videoLoopStopFn) videoLoopStopFn();
   startVideoStreaming();
 }
 
 function disconnect() {
-  if (stream) stream.getTracks().forEach(track => track.stop());
-  if (ws) ws.close();
-  if (videoStreamInterval) clearInterval(videoStreamInterval);
+  if (stream) {
+    stream.getTracks().forEach(t => t.stop());
+    stream = null;
+  }
+  if (ws) {
+    ws.close();
+    ws = null;
+  }
+  if (videoLoopStopFn) {
+    videoLoopStopFn();
+    videoLoopStopFn = null;
+  }
 
   document.getElementById('setupScreen').style.display = 'flex';
   document.getElementById('cameraScreen').classList.remove('active');
@@ -256,12 +486,14 @@ function updateTime() {
   document.getElementById('timestamp').textContent = now.toLocaleTimeString('ja-JP');
 }
 
+// タブが非表示になったら負荷軽減のためストリーミング停止
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
-    if (videoStreamInterval) clearInterval(videoStreamInterval);
+    if (videoLoopStopFn) videoLoopStopFn();
   } else {
-    // 表示に戻ったら再度開始（品質設定はそのまま）
-    startVideoStreaming();
+    if (ws && ws.readyState === WebSocket.OPEN && stream && !isStreaming) {
+      startVideoStreaming();
+    }
   }
 });
 </script>
