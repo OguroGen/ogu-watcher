@@ -192,11 +192,11 @@
   <!-- セットアップ画面 -->
   <div class="setup-screen" id="setupScreen">
     <div class="logo">📹</div>
-    <h1>OguWatcher</h1>
+    <h1>OguWatcher改/h1>
     <div class="setup-form">
       <div class="form-group">
         <label>PCのIPアドレス</label>
-        <input type="text" id="serverIP" placeholder="例: 192.168.1.100" value="">
+        <input type="text" id="serverIP" placehold改er="例: 192.168.1.100" value="">
       </div>
       <div class="form-group">
         <label>カメラ名（任意）</label>
@@ -263,9 +263,9 @@ let videoLoopStopFn = null;
 let isStreaming = false;
 
 const qualityPresets = {
-  low:    { width: 480,  height: 270, fps: 15, quality: 0.5 },
-  medium: { width: 640,  height: 360, fps: 20, quality: 0.65 },
-  high:   { width: 1280, height: 720, fps: 30, quality: 0.75 },
+  low:    { width: 480,  height: 270, fps: 10, quality: 0.3 },
+  medium: { width: 640,  height: 360, fps: 20, quality: 0.5 },
+  high:   { width: 1280, height: 720, fps: 30, quality: 0.8 },
 };
 
 function generateCameraId() {
