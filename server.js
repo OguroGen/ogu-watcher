@@ -185,7 +185,11 @@ function sendCameraList(viewer) {
 }
 
 setInterval(() => {
-  console.log(`接続状況 - カメラ: ${cameras.size}台 / ビューアー: ${viewers.size}台`);
+  const now = new Date();
+  const timeStr = now.toLocaleString('ja-JP', { hour12: false });
+  console.log(
+    `接続状況 - カメラ: ${cameras.size}台 / ビューアー: ${viewers.size}台 (${timeStr})`
+  );
 }, 30000);
 
 server.listen(PORT, '0.0.0.0', () => {
